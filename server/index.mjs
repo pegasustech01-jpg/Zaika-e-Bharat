@@ -2,13 +2,12 @@ import "dotenv/config";
 import express from "express";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { initDb, listContent, getContentById, createContent, updateContent, deleteContent } from "./db.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const dataFile = path.join(root, "server/data/content.json");
 const production = process.env.NODE_ENV === "production";
 const port = Number(process.env.PORT || 5173);
 const sessionMs = Number(process.env.SESSION_HOURS || 8) * 60 * 60 * 1000;
@@ -56,16 +55,6 @@ function verifyOrigin(req, res, next) {
   next();
 }
 
-async function readContent() {
-  return JSON.parse(await fs.readFile(dataFile, "utf8"));
-}
-
-async function writeContent(content) {
-  const temporary = `${dataFile}.${process.pid}.tmp`;
-  await fs.writeFile(temporary, JSON.stringify(content, null, 2));
-  await fs.rename(temporary, dataFile);
-}
-
 function cleanEntry(body, id) {
   const allowedTypes = new Set(["Story", "Dish", "Spice", "Region", "Tradition"]);
   const status = body.status === "Draft" ? "Draft" : "Published";
@@ -107,24 +96,27 @@ app.post("/api/auth/logout", (req, res) => {
   res.json({ authenticated: false });
 });
 
-app.get("/api/content", async (_, res) => res.json((await readContent()).filter(entry => entry.status !== "Draft")));
-app.get("/api/admin/content", requireAdmin, async (_, res) => res.json(await readContent()));
+app.get("/api/content", async (_, res) => res.json(await listContent({ publishedOnly: true })));
+app.get("/api/admin/content", requireAdmin, async (_, res) => res.json(await listContent()));
 app.post("/api/admin/content", requireAdmin, async (req, res) => {
-  const content = await readContent();
   const entry = cleanEntry(req.body, Date.now());
   if (!entry.title) return res.status(400).json({ error: "A title is required." });
-  content.unshift(entry); await writeContent(content); res.status(201).json(entry);
+  const created = await createContent(entry);
+  res.status(201).json(created);
 });
 app.put("/api/admin/content/:id", requireAdmin, async (req, res) => {
-  const content = await readContent(); const id = Number(req.params.id); const index = content.findIndex(entry => entry.id === id);
-  if (index < 0) return res.status(404).json({ error: "Entry not found." });
-  const entry = cleanEntry(req.body, id); if (!entry.title) return res.status(400).json({ error: "A title is required." });
-  content[index] = entry; await writeContent(content); res.json(entry);
+  const id = Number(req.params.id);
+  const existing = await getContentById(id);
+  if (!existing) return res.status(404).json({ error: "Entry not found." });
+  const entry = cleanEntry(req.body, id);
+  if (!entry.title) return res.status(400).json({ error: "A title is required." });
+  const updated = await updateContent(id, entry);
+  res.json(updated);
 });
 app.delete("/api/admin/content/:id", requireAdmin, async (req, res) => {
-  const content = await readContent(); const next = content.filter(entry => entry.id !== Number(req.params.id));
-  if (next.length === content.length) return res.status(404).json({ error: "Entry not found." });
-  await writeContent(next); res.status(204).end();
+  const deleted = await deleteContent(Number(req.params.id));
+  if (!deleted) return res.status(404).json({ error: "Entry not found." });
+  res.status(204).end();
 });
 
 if (production) {
@@ -137,6 +129,8 @@ if (production) {
 }
 
 setInterval(() => { for (const [key, session] of sessions) if (session.expires <= Date.now()) sessions.delete(key); }, 15 * 60_000).unref();
+
+initDb().catch(err => { console.error("Database initialization failed:", err); process.exit(1); });
 
 export { app };
 

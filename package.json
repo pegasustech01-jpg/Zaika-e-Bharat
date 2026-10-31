@@ -9,9 +9,11 @@
     "preview": "NODE_ENV=production node server/index.mjs",
     "start": "NODE_ENV=production node server/index.mjs",
     "hash-admin": "node server/hash-password.mjs",
+    "migrate": "node scripts/migrate.mjs",
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.2",
     "bcryptjs": "^3.0.3",
