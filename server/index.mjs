@@ -137,4 +137,9 @@ if (production) {
 }
 
 setInterval(() => { for (const [key, session] of sessions) if (session.expires <= Date.now()) sessions.delete(key); }, 15 * 60_000).unref();
-app.listen(port, () => console.log(`Zaika-e-Bharat server running at http://localhost:${port}`));
+
+export { app };
+
+if (process.env.NODE_ENV !== "production" || process.env.VERCEL !== "1") {
+  app.listen(port, () => console.log(`Zaika-e-Bharat server running at http://localhost:${port}`));
+}
