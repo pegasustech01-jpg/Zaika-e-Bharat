@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "type": "Story",
+    "title": "The Legacy of Ayurveda in Indian Cuisine",
+    "category": "Ancient Wisdom",
+    "excerpt": "How food, balance and the seasons shaped India's oldest culinary philosophy.",
+    "image": "/images/ayurveda-sage.jpg",
+    "status": "Published"
+  },
+  {
+    "id": 2,
+    "type": "Spice",
+    "title": "Turmeric: The Golden Spice",
+    "category": "Healing Spices",
+    "excerpt": "A journey through the sacred, medicinal and culinary life of haldi.",
+    "image": "/images/golden-turmeric.jpg",
+    "status": "Published"
+  },
+  {
+    "id": 3,
+    "type": "Dish",
+    "title": "The Ceremonial Indian Thali",
+    "category": "Royal Kitchens",
+    "excerpt": "A complete meal whose many flavours form one harmonious whole.",
+    "image": "/images/heritage-spices.jpg",
+    "status": "Published"
+  },
+  {
+    "id": 4,
+    "type": "Region",
+    "title": "The Kitchens of the Ganges",
+    "category": "Northern India",
+    "excerpt": "River, ritual and the enduring recipes of India's sacred cities.",
+    "image": "/images/bharat-hero.jpg",
+    "status": "Published"
+  }
+]
