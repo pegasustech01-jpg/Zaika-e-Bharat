@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { neon } from "@neondatabase/serverless";
 
 if (!process.env.DATABASE_URL) {
@@ -36,30 +37,36 @@ function mapRow(row) {
   };
 }
 
+function normalizeRows(result) {
+  if (Array.isArray(result)) return result;
+  return result?.rows ?? [];
+}
+
 export async function listContent({ publishedOnly = false } = {}) {
   const query = publishedOnly
     ? sql`SELECT * FROM content_entries WHERE status != 'Draft' ORDER BY id DESC`
     : sql`SELECT * FROM content_entries ORDER BY id DESC`;
-  return query.rows.map(mapRow);
+  const rows = normalizeRows(await query);
+  return rows.map(mapRow);
 }
 
 export async function getContentById(id) {
-  const result = await sql`SELECT * FROM content_entries WHERE id = ${id}`;
-  if (result.rows.length === 0) return null;
-  return mapRow(result.rows[0]);
+  const result = normalizeRows(await sql`SELECT * FROM content_entries WHERE id = ${id}`);
+  if (result.length === 0) return null;
+  return mapRow(result[0]);
 }
 
 export async function createContent(entry) {
-  const result = await sql`
+  const result = normalizeRows(await sql`
     INSERT INTO content_entries (type, title, category, excerpt, image, gallery, status)
     VALUES (${entry.type}, ${entry.title}, ${entry.category}, ${entry.excerpt}, ${entry.image}, ${JSON.stringify(entry.gallery ?? [])}::jsonb, ${entry.status})
     RETURNING *
-  `;
-  return mapRow(result.rows[0]);
+  `);
+  return mapRow(result[0]);
 }
 
 export async function updateContent(id, entry) {
-  const result = await sql`
+  const result = normalizeRows(await sql`
     UPDATE content_entries
     SET type = ${entry.type}, title = ${entry.title}, category = ${entry.category},
         excerpt = ${entry.excerpt}, image = ${entry.image},
@@ -67,12 +74,12 @@ export async function updateContent(id, entry) {
         status = ${entry.status}, updated_at = NOW()
     WHERE id = ${id}
     RETURNING *
-  `;
-  if (result.rows.length === 0) return null;
-  return mapRow(result.rows[0]);
+  `);
+  if (result.length === 0) return null;
+  return mapRow(result[0]);
 }
 
 export async function deleteContent(id) {
-  const result = await sql`DELETE FROM content_entries WHERE id = ${id} RETURNING id`;
-  return result.rows.length > 0;
+  const result = normalizeRows(await sql`DELETE FROM content_entries WHERE id = ${id} RETURNING id`);
+  return result.length > 0;
 }

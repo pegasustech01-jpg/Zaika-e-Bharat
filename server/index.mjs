@@ -97,7 +97,14 @@ app.post("/api/auth/logout", (req, res) => {
 });
 
 app.get("/api/content", async (_, res) => res.json(await listContent({ publishedOnly: true })));
-app.get("/api/admin/content", requireAdmin, async (_, res) => res.json(await listContent()));
+app.get("/api/admin/content", requireAdmin, async (_, res) => {
+  try {
+    res.json(await listContent());
+  } catch (err) {
+    console.error("Admin content fetch error:", err);
+    res.status(500).json({ error: "Database error: " + (err instanceof Error ? err.message : String(err)) });
+  }
+});
 app.post("/api/admin/content", requireAdmin, async (req, res) => {
   const entry = cleanEntry(req.body, Date.now());
   if (!entry.title) return res.status(400).json({ error: "A title is required." });

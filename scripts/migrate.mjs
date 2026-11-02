@@ -20,7 +20,8 @@ async function migrate() {
   )`;
 
   const existing = await sql`SELECT COUNT(*) as count FROM content_entries`;
-  const count = Number(existing.rows[0].count);
+  const existingRows = existing.rows ?? existing;
+  const count = Number(existingRows[0]?.count ?? 0);
   if (count > 0) {
     console.log(`Database already contains ${count} entries. Skipping migration.`);
     return;
@@ -38,7 +39,8 @@ async function migrate() {
   }
 
   const verify = await sql`SELECT COUNT(*) as count FROM content_entries`;
-  console.log(`Migration complete. ${verify.rows[0].count} entries in database.`);
+  const verifyRows = verify.rows ?? verify;
+  console.log(`Migration complete. ${verifyRows[0]?.count} entries in database.`);
 }
 
 migrate().catch(err => {

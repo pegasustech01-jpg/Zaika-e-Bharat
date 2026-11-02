@@ -114,7 +114,7 @@ export default function App() {
   const { page, id, go } = useRoute(); const [searching, setSearching] = useState(false);
   const [entries, setEntries] = useState<Entry[]>(defaultEntries); const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const loadPublic = async () => { try { const response = await fetch("/api/content"); if (response.ok) setEntries(await response.json()); } catch { /* Keep bundled content available if the network is temporarily unavailable. */ } };
-  const loadAdmin = async () => { const response = await fetch("/api/admin/content", { credentials: "include" }); if (response.status === 401) throw new Error("unauthorized"); if (!response.ok) throw new Error("Unable to load the admin archive."); setEntries(await response.json()); };
+  const loadAdmin = async () => { const response = await fetch("/api/admin/content", { credentials: "include" }); if (response.status === 401) throw new Error("unauthorized"); if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || "Unable to load the admin archive."); } setEntries(await response.json()); };
   const authenticate = async () => { const response = await fetch("/api/auth/session", { credentials: "include" }); if (!response.ok) throw new Error("unauthorized"); setAuthenticated(true); await loadAdmin(); };
   const unauthorized = () => { setAuthenticated(false); go("login"); };
   const logout = async () => { await fetch("/api/auth/logout", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => undefined); setAuthenticated(false); await loadPublic(); go("login"); };
