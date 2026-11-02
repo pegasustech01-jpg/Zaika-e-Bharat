@@ -5,7 +5,19 @@ import crypto from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { initDb, listContent, getContentById, createContent, updateContent, deleteContent } from "./db.mjs";
+import {
+  initDb,
+  listContent,
+  getContentById,
+  createContent,
+  updateContent,
+  deleteContent,
+  createSession,
+  getSession,
+  updateSession,
+  deleteSession,
+  cleanupSessions,
+} from "./db.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const production = process.env.NODE_ENV === "production";
@@ -13,9 +25,15 @@ const port = Number(process.env.PORT || 5173);
 const sessionMs = Number(process.env.SESSION_HOURS || 8) * 60 * 60 * 1000;
 const adminIdentifier = process.env.ADMIN_IDENTIFIER?.trim().toLowerCase() || "";
 const adminHash = process.env.ADMIN_PASSWORD_HASH || "";
-const sessions = new Map();
 const attempts = new Map();
 const app = express();
+
+if (!adminIdentifier) {
+  console.warn("Auth config missing: ADMIN_IDENTIFIER not set");
+}
+if (!adminHash) {
+  console.warn("Auth config missing: ADMIN_PASSWORD_HASH not set");
+}
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
@@ -33,15 +51,20 @@ function sessionKey(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-function requireAdmin(req, res, next) {
+async function requireAdmin(req, res, next) {
   const token = parseCookies(req).zeb_session;
-  const session = token && sessions.get(sessionKey(token));
-  if (!session || session.expires <= Date.now()) {
-    if (token) sessions.delete(sessionKey(token));
+  if (!token) {
     res.clearCookie("zeb_session", { path: "/" });
     return res.status(401).json({ error: "Authentication required." });
   }
-  session.expires = Date.now() + sessionMs;
+  const key = sessionKey(token);
+  const session = await getSession(key);
+  if (!session || new Date(session.expires_at) <= new Date()) {
+    if (token) await deleteSession(key);
+    res.clearCookie("zeb_session", { path: "/" });
+    return res.status(401).json({ error: "Authentication required." });
+  }
+  await updateSession(key, new Date(Date.now() + sessionMs).toISOString());
   next();
 }
 
@@ -74,24 +97,33 @@ app.post("/api/auth/login", async (req, res) => {
   if (record.count >= 5) return res.status(429).json({ error: "Too many login attempts. Try again later." });
   const identifier = String(req.body.identifier || "").trim().toLowerCase();
   const password = String(req.body.password || "");
-  if (!adminIdentifier || !adminHash) return res.status(503).json({ error: "Admin authentication has not been configured on the server." });
+  if (!adminIdentifier || !adminHash) {
+    console.error("Auth not configured: missing ADMIN_IDENTIFIER or ADMIN_PASSWORD_HASH");
+    return res.status(503).json({ error: "Admin authentication has not been configured on the server." });
+  }
   const validPassword = await bcrypt.compare(password, adminHash).catch(() => false);
   if (identifier !== adminIdentifier || !validPassword) {
+    console.warn(`Auth failed: identifier_match=${identifier === adminIdentifier}, password_match=${validPassword}`);
     record.count += 1; attempts.set(ip, record);
     await new Promise(resolve => setTimeout(resolve, 450));
     return res.status(401).json({ error: "The email/username or password is incorrect." });
   }
   attempts.delete(ip);
   const token = crypto.randomBytes(32).toString("base64url");
-  sessions.set(sessionKey(token), { expires: Date.now() + sessionMs });
+  const key = sessionKey(token);
+  await createSession(key, new Date(Date.now() + sessionMs).toISOString());
+  console.info("Auth success: session created");
   res.cookie("zeb_session", token, { httpOnly: true, secure: production, sameSite: "strict", path: "/", maxAge: sessionMs });
   res.json({ authenticated: true });
 });
 
 app.get("/api/auth/session", requireAdmin, (_, res) => res.json({ authenticated: true }));
-app.post("/api/auth/logout", (req, res) => {
+app.post("/api/auth/logout", async (req, res) => {
   const token = parseCookies(req).zeb_session;
-  if (token) sessions.delete(sessionKey(token));
+  if (token) {
+    await deleteSession(sessionKey(token));
+    console.info("Auth logout: session deleted");
+  }
   res.clearCookie("zeb_session", { httpOnly: true, secure: production, sameSite: "strict", path: "/" });
   res.json({ authenticated: false });
 });
@@ -135,7 +167,7 @@ if (production) {
   app.use(vite.middlewares);
 }
 
-setInterval(() => { for (const [key, session] of sessions) if (session.expires <= Date.now()) sessions.delete(key); }, 15 * 60_000).unref();
+setInterval(cleanupSessions, 15 * 60_000).unref();
 
 initDb().catch(err => { console.error("Database initialization failed:", err); process.exit(1); });
 

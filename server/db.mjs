@@ -22,6 +22,14 @@ export async function initDb() {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
   `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token_hash VARCHAR(64) PRIMARY KEY,
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+  `;
 }
 
 function mapRow(row) {
@@ -82,4 +90,31 @@ export async function updateContent(id, entry) {
 export async function deleteContent(id) {
   const result = normalizeRows(await sql`DELETE FROM content_entries WHERE id = ${id} RETURNING id`);
   return result.length > 0;
+}
+
+export async function createSession(tokenHash, expiresAt) {
+  await sql`
+    INSERT INTO sessions (token_hash, expires_at)
+    VALUES (${tokenHash}, ${expiresAt})
+    ON CONFLICT (token_hash) DO UPDATE SET expires_at = ${expiresAt}
+  `;
+}
+
+export async function getSession(tokenHash) {
+  const result = normalizeRows(await sql`SELECT * FROM sessions WHERE token_hash = ${tokenHash}`);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateSession(tokenHash, expiresAt) {
+  await sql`
+    UPDATE sessions SET expires_at = ${expiresAt} WHERE token_hash = ${tokenHash}
+  `;
+}
+
+export async function deleteSession(tokenHash) {
+  await sql`DELETE FROM sessions WHERE token_hash = ${tokenHash}`;
+}
+
+export async function cleanupSessions() {
+  await sql`DELETE FROM sessions WHERE expires_at <= NOW()`;
 }
